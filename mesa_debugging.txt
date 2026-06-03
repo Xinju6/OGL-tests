@@ -1,0 +1,21 @@
+Display list text corruption (glretrace/wglUseFontBitmapsW)
+Fixed by: shared.c + hash.c changes only.
+
+Root cause: glGenLists returned 32 instead of 1 on a fresh context because util_idalloc_sparse_alloc_range allocates on 32-bit-aligned boundaries. The glretrace replay called glListBase(1) (the raw Windows trace value) but the actual lists were at IDs 32–287. So glCallLists('A'=65) executed list 1+65=66, which mapped to 66-31=35th list in the block — the wrong glyph.
+
+Fix path: shared.c sets DisplayList.reuse_names = false → hash.c _mesa_HashFindFreeKeyBlock takes the MaxKey+1 sequential path → returns 1 on fresh context → trace base == replay base → correct glyph rendered.
+
+shaderimage.c change
+Fixes: the GL name reuse bug (842c913 regression) in glBindImageTextures.
+
+Scenario:
+
+Texture T bound to image unit, u->TexObj = T, T->Name = 5
+T is deleted → name 5 freed, T->DeletePending = true
+New texture Q created, gets name 5 (reused)
+glBindImageTextures(..., textures={5}, ...) called
+Fast-path check texObj->Name != texture → 5 != 5 → false → skips re-lookup, keeps stale T bound
+With fix: texObj->DeletePending → true → forces re-lookup → finds Q → binds correctly
+This has nothing to do with display lists or font rendering. It's about image unit bindings (glBindImageTextures) holding onto deleted texture objects due to the name comparison fast-path.
+
+Both bugs stem from the same root regression (GL name reuse after the idalloc switch), which is why they landed in one commit — but the code paths and symptoms are completely independent.
