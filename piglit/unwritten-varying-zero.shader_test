@@ -1,0 +1,35 @@
+[require]
+GLSL >= 1.20
+
+[vertex shader]
+#version 120
+
+varying vec4 lightDir0;
+
+void main()
+{
+   gl_Position = gl_Vertex;
+
+   /* Leave .w unwritten. Mesa's GL path should make the consumer see 0. */
+   lightDir0.xyz = vec3(1.0, 2.0, 2.0);
+}
+
+[fragment shader]
+#version 120
+
+varying vec4 lightDir0;
+
+void main()
+{
+   float distSqr = dot(lightDir0, lightDir0);
+   bool ok = abs(distSqr - 9.0) < 0.01;
+
+   gl_FragColor = ok ? vec4(0.0, 1.0, 0.0, 1.0)
+                     : vec4(1.0, 0.0, 0.0, 1.0);
+}
+
+[test]
+clear color 0.0 0.0 0.0 0.0
+clear
+draw rect -1 -1 2 2
+probe all rgba 0.0 1.0 0.0 1.0

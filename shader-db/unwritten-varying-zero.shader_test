@@ -1,0 +1,27 @@
+[require]
+GLSL >= 1.20
+
+[vertex shader]
+#version 120
+
+varying vec4 lightDir0;
+
+void main()
+{
+   gl_Position = gl_Vertex;
+
+   /* Leave .w unwritten so linked varying optimization must choose 0. */
+   lightDir0.xyz = vec3(1.0, 2.0, 2.0);
+}
+
+[fragment shader]
+#version 120
+
+varying vec4 lightDir0;
+
+void main()
+{
+   float distSqr = dot(lightDir0, lightDir0);
+
+   gl_FragColor = vec4(distSqr / 9.0, distSqr, 0.0, 1.0);
+}
