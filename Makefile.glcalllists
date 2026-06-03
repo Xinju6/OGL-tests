@@ -1,7 +1,10 @@
-# Build the glCallLists date test and the display-list allocation regression test
+# Build the glCallLists date test, the display-list allocation regression test,
+# and the glBindImageTextures name-reuse regression test.
+#
 # Usage:  make -f Makefile.glcalllists
 #         make -f Makefile.glcalllists run
 #         make -f Makefile.glcalllists run-alloc
+#         make -f Makefile.glcalllists run-image
 #
 # Install deps (Ubuntu):
 #   sudo apt-get install freeglut3-dev libgl-dev
@@ -16,14 +19,20 @@ SRC_DATE     = glcalllists_date_test.c
 TARGET_ALLOC = gl_dlist_alloc_test
 SRC_ALLOC    = gl_dlist_alloc_test.c
 
-.PHONY: all clean run run-alloc
+TARGET_IMAGE = gl_bind_image_textures_name_reuse_test
+SRC_IMAGE    = gl_bind_image_textures_name_reuse_test.c
 
-all: $(TARGET_DATE) $(TARGET_ALLOC)
+.PHONY: all clean run run-alloc run-image
+
+all: $(TARGET_DATE) $(TARGET_ALLOC) $(TARGET_IMAGE)
 
 $(TARGET_DATE): $(SRC_DATE)
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 $(TARGET_ALLOC): $(SRC_ALLOC)
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
+$(TARGET_IMAGE): $(SRC_IMAGE)
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 run: $(TARGET_DATE)
@@ -32,5 +41,8 @@ run: $(TARGET_DATE)
 run-alloc: $(TARGET_ALLOC)
 	./$(TARGET_ALLOC)
 
+run-image: $(TARGET_IMAGE)
+	./$(TARGET_IMAGE)
+
 clean:
-	rm -f $(TARGET_DATE) $(TARGET_ALLOC)
+	rm -f $(TARGET_DATE) $(TARGET_ALLOC) $(TARGET_IMAGE)
