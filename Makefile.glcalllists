@@ -1,0 +1,36 @@
+# Build the glCallLists date test and the display-list allocation regression test
+# Usage:  make -f Makefile.glcalllists
+#         make -f Makefile.glcalllists run
+#         make -f Makefile.glcalllists run-alloc
+#
+# Install deps (Ubuntu):
+#   sudo apt-get install freeglut3-dev libgl-dev
+
+CC      = gcc
+CFLAGS  = -O2 -Wall -Wextra
+LDFLAGS = -lGL -lglut -lm
+
+TARGET_DATE  = glcalllists_date_test
+SRC_DATE     = glcalllists_date_test.c
+
+TARGET_ALLOC = gl_dlist_alloc_test
+SRC_ALLOC    = gl_dlist_alloc_test.c
+
+.PHONY: all clean run run-alloc
+
+all: $(TARGET_DATE) $(TARGET_ALLOC)
+
+$(TARGET_DATE): $(SRC_DATE)
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
+$(TARGET_ALLOC): $(SRC_ALLOC)
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
+run: $(TARGET_DATE)
+	./$(TARGET_DATE)
+
+run-alloc: $(TARGET_ALLOC)
+	./$(TARGET_ALLOC)
+
+clean:
+	rm -f $(TARGET_DATE) $(TARGET_ALLOC)
