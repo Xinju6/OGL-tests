@@ -19,3 +19,56 @@ With fix: texObj->DeletePending → true → forces re-lookup → finds Q → bi
 This has nothing to do with display lists or font rendering. It's about image unit bindings (glBindImageTextures) holding onto deleted texture objects due to the name comparison fast-path.
 
 Both bugs stem from the same root regression (GL name reuse after the idalloc switch), which is why they landed in one commit — but the code paths and symptoms are completely independent.
+
+
+Reviewed them as a stack: c6392083bfc first, then df7a91ce913.
+Findings
+Medium: src/mesa/main/shared.c (line 84) / src/mesa/main/hash.c (line 200)
+DisplayList.reuse_names = false makes glGenLists never reuse deleted display-list names. That is broader than the “fresh context returns 32 instead of 1” problem, and can make glGenLists return 0 after MaxKey grows even if there are deleted/free contiguous ranges below it. I’d avoid saying display list names “must not be reused”; a safer fix is “prefer sequential low IDs” while still scanning/reusing deleted ranges when needed.
+
+Low/Medium: src/mesa/main/hash.c (line 197)
+The overflow guard in df7a91c still underflows if numKeys > maxKey, because maxKey - numKeys is unsigned. For example, a huge numKeys can wrap the subtraction and pass the check. I’d write it as:
+c
+
+
+
+if (numKeys == 0 || numKeys > maxKey ||
+    table->MaxKey > maxKey - numKeys)
+   return 0;
+
+
+Notes
+The shaderimage.c change looks reasonable: checking texObj->DeletePending before reusing the currently bound image texture matches the pattern already used by glBindTextures.
+The pipeline DeletePending change looks mostly unnecessary/misleading to me. Program pipeline objects are stored in ctx->Pipeline.Objects, not shared state, and delete removes them from that hash. I don’t see it fixing the same cross-context name-reuse issue as textures. I’d probably leave pipeline objects out unless there is a specific failing case.
+
+Is the change for pipeline obj necessary?
+No, it is not necessary. Here is why:
+
+Pipeline objects are per-context, not shared
+ctx->Pipeline.Objects is a per-context hash table (initialized in _mesa_initialize_pipeline_object_dispatch at line 96), not in ctx->Shared. Unlike textures, buffers, and samplers, pipeline objects cannot be deleted in one context while another context still holds a reference to the same object. The multi-context name-reuse race that motivates the DeletePending pattern simply cannot happen for pipelines.
+
+The delete path already unbinds by pointer, not name
+Line 574 in the delete path:
+
+
+if (obj == ctx->Pipeline.Current) {
+    _mesa_BindProgramPipeline(0);
+}
+This is a pointer comparison, not a name comparison. After _mesa_BindProgramPipeline(0), ctx->_Shader is set to ctx->Pipeline.Default which has Name == 0. The subsequent fast-path check:
+
+
+if (!ctx->_Shader->DeletePending && ctx->_Shader->Name == pipeline)
+    return;
+would evaluate 0 == pipeline — which is false for any valid pipeline name. The DeletePending guard is therefore never the deciding factor.
+
+What the pattern is actually for
+For shared objects (textures in ctx->Shared->TexObjects, buffers, samplers), the scenario is:
+
+Context A binds texture T (name=5), u->TexObj->Name = 5
+Context B deletes T — A's binding is not cleared, u->TexObj->DeletePending = true
+Context B creates texture Q (reuses name 5)
+Context A calls glBindTextures(5) — without DeletePending, u->TexObj->Name == 5 fast-paths incorrectly
+Pipeline objects cannot be in step 2 because they are not in the shared state — only the creating context owns them.
+
+Verdict
+The DeletePending field on gl_pipeline_object and the guard in bind_program_pipeline are dead code. They are harmless but unnecessary — unlike the equivalent fixes for textures, buffers, and samplers which address a real multi-context race.
